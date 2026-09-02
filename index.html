@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>مافیا آنلاین</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background: #111;
+            color: white;
+            text-align: center;
+        }
+
+        .box {
+            width: 92%;
+            max-width: 450px;
+            margin: 40px auto;
+            padding: 25px;
+            background: #1d1d1d;
+            border-radius: 18px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 32px;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            box-sizing: border-box;
+            border-radius: 10px;
+            border: none;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 10px;
+            font-size: 17px;
+        }
+
+        #register {
+            background: #444;
+            color: white;
+        }
+
+        #create {
+            background: #8b0000;
+            color: white;
+        }
+
+        #rooms {
+            background: #333;
+            color: white;
+        }
+
+        .room {
+            background: #292929;
+            padding: 15px;
+            margin-top: 12px;
+            border-radius: 12px;
+        }
+
+        .join {
+            background: #006400;
+            color: white;
+        }
+
+        #status {
+            margin-top: 15px;
+            color: #00ff88;
+        }
+
+        #lobby {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="box">
+
+    <h1>🎭 مافیا آنلاین</h1>
+
+    <input
+        id="name"
+        type="text"
+        placeholder="نام بازیکن"
+        maxlength="20"
+    >
+
+    <button id="register">ثبت نام</button>
+
+    <button id="create">🎮 ساخت لابی</button>
+
+    <button id="rooms">👥 بازی‌های موجود</button>
+
+    <p id="status">در حال اتصال...</p>
+
+    <div id="roomsList"></div>
+
+    <div id="lobby">
+
+        <h2>🎭 لابی</h2>
+
+        <p id="lobbyId"></p>
+
+        <h3>بازیکنان:</h3>
+
+        <div id="players"></div>
+
+    </div>
+
+</div>
+
+<script>
+
+let socket = null;
+let playerName = "";
+let currentLobby = null;
+
+
+// -------------------------
+// اتصال به سرور
+// -------------------------
+
+function connect() {
+
+    socket = new WebSocket("ws://" + location.host);
+
+    socket.onopen = function () {
+
+        document.getElementById("status").textContent =
+            "🟢 متصل به سرور";
+
+    };
+
+
+    socket.onmessage = function (event) {
+
+        const message = JSON.parse(event.data);
+
+        handleServerMessage(message);
+
+    };
+
+
+    socket.onclose = function () {
+
+        document.getElementById("status").textContent =
+            "🔴 اتصال به سرور قطع شد";
+
+    };
+
+
+    socket.onerror = function () {
+
+        document.getElementById("status").textContent =
+            "❌ خطا در اتصال به سرور";
+
+    };
+
+}
+
+
+// -------------------------
+// ارسال پیام
+// -------------------------
+
+function send(data) {
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+
+        document.getElementById("status").textContent =
+            "❌ هنوز به سرور وصل نشده‌ای";
+
+        return;
+    }
+
+    socket.send(JSON.stringify(data));
+
+}
+
+
+// -------------------------
+// ثبت نام
+// -------------------------
+
+document.getElementById("register").onclick = function () {
+
+    const name =
+        document.getElementById("name").value.trim();
+
+    if (name === "") {
+
+        document.getElementById("status").textContent =
+            "❌ اول نامت را وارد کن";
+
+        return;
+    }
+
+    playerName = name;
+
+    send({
+        type: "REGISTER",
+        name: playerName
+    });
+
+};
+
+
+// -------------------------
+// ساخت لابی
+// -------------------------
+
+document.getElementById("create").onclick = function () {
+
+    if (playerName === "") {
+
+        document.getElementById("status").textContent =
+            "❌ اول ثبت نام کن";
+
+        return;
+    }
+
+    send({
+        type: "CREATE_LOBBY"
+    });
+
+};
+
+
+// -------------------------
+// دریافت لابی‌ها
+// -------------------------
+
+document.getElementById("rooms").onclick = function () {
+
+    send({
+        type: "GET_LOBBIES"
+    });
+
+};
+
+
+// -------------------------
+// پیام‌های سرور
+// -------------------------
+
+function handleServerMessage(message) {
+
+    if (message.type === "CONNECTED") {
+
+        document.getElementById("status").textContent =
+            "🟢 متصل به سرور";
+
+    }
+
+
+    if (message.type === "REGISTERED") {
+
+        document.getElementById("status").textContent =
+            message.message;
+
+    }
+
+
+    if (message.type === "LOBBY_CREATED") {
+
+        currentLobby = message.lobbyId;
+
+        document.getElementById("status").textContent =
+            message.message;
+
+        showLobby();
+
+    }
+
+
+    if (message.type === "JOINED_LOBBY") {
+
+        currentLobby = message.lobbyId;
+
+        document.getElementById("status").textContent =
+            message.message;
+
+        showLobby();
+
+    }
+
+
+    if (message.type === "LOBBIES") {
+
+        showLobbies(message.lobbies);
+
+    }
+
+
+    if (message.type === "LOBBY_UPDATE") {
+
+        currentLobby = message.lobbyId;
+
+        showLobby();
+
+        showPlayers(message.players);
+
+    }
+
+
+    if (message.type === "GAME_STARTED") {
+
+        document.getElementById("status").textContent =
+            "🎭 بازی شروع شد!";
+
+    }
+
+
+    if (message.type === "ERROR") {
+
+        document.getElementById("status").textContent =
+            "❌ " + message.message;
+
+    }
+
+}
+
+
+// -------------------------
+// نمایش لابی‌ها
+// -------------------------
+
+function showLobbies(lobbies) {
+
+    const list =
+        document.getElementById("roomsList");
+
+    list.innerHTML = "";
+
+    if (lobbies.length === 0) {
+
+        list.innerHTML =
+            "<p>هیچ لابی‌ای موجود نیست.</p>";
+
+        return;
+    }
+
+    lobbies.forEach(function (lobby) {
+
+        const div =
+            document.createElement("div");
+
+        div.className = "room";
+
+        div.innerHTML = `
+            <strong>🎮 لابی ${lobby.id}</strong>
+            <p>
+                بازیکنان:
+                ${lobby.count}/${lobby.maxPlayers}
+            </p>
+
+            <button class="join">
+                ورود به لابی
+            </button>
+        `;
+
+        div.querySelector(".join").onclick =
+            function () {
+
+                send({
+                    type: "JOIN_LOBBY",
+                    lobbyId: lobby.id
+                });
+
+            };
+
+        list.appendChild(div);
+
+    });
+
+}
+
+
+// -------------------------
+// نمایش لابی فعلی
+// -------------------------
+
+function showLobby() {
+
+    document.getElementById("lobby").style.display =
+        "block";
+
+    document.getElementById("lobbyId").textContent =
+        "کد لابی: " + currentLobby;
+
+}
+
+
+// -------------------------
+// نمایش بازیکنان
+// -------------------------
+
+function showPlayers(players) {
+
+    const box =
+        document.getElementById("players");
+
+    box.innerHTML = "";
+
+    players.forEach(function (player) {
+
+        const p =
+            document.createElement("p");
+
+        p.textContent =
+            "👤 " + player.name;
+
+        box.appendChild(p);
+
+    });
+
+}
+
+
+// -------------------------
+// شروع اتصال
+// -------------------------
+
+connect();
+
+</script>
+
+</body>
+</html>

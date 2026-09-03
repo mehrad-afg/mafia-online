@@ -136,7 +136,7 @@ let currentLobby = null;
 
 function connect() {
 
-    socket = new WebSocket("ws://" + location.host);
+    socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host);
 
     socket.onopen = function () {
 
